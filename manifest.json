@@ -2,7 +2,7 @@
   "vendor": "auchan",
   "name": "minicart",
   "title": "Mini Cart",
-  "version": "2.68.4-beta.0",
+  "version": "2.68.5-beta.0",
   "builders": {
     "messages": "1.x",
     "store": "0.x",
