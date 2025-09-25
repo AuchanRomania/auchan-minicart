@@ -58,7 +58,7 @@ const Summary: FC<Props> = ({ classes }) => {
       return
     }
     return items.reduce((total: number, item: OrderFormItem) => {
-      if (packagesSkuIds.includes(item.id)) {
+      if (packagesSkuIds.includes(item.id) && item.availability === 'available') {
         return (
           total + ((item?.listPrice as number) ?? 0) * (item?.quantity ?? 1)
         )
@@ -68,11 +68,11 @@ const Summary: FC<Props> = ({ classes }) => {
   }, [items, packagesSkuIds])
 
   const sgrValue = useMemo(() => {
-    if (!sgrSkuIds.length) {
+    if (!sgrSkuIds.length || items?.availability !== 'available') {
       return
     }
     return items.reduce((total: number, item: OrderFormItem) => {
-      if (sgrSkuIds.includes(item.id)) {
+      if (sgrSkuIds.includes(item.id) && item.availability === 'available') {
         return (
           total + ((item?.listPrice as number) ?? 0) * (item?.quantity ?? 1)
         )
