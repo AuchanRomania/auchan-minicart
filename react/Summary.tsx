@@ -1,6 +1,6 @@
 import React, { FC, useEffect, useMemo, useState } from 'react'
 import { ExtensionPoint } from 'vtex.render-runtime'
-import { OrderForm as OrderFormComponent } from 'vtex.order-manager'
+import { OrderForm as OrderFormComponent, OrderQueue } from 'vtex.order-manager'
 import { useCssHandles, CssHandlesTypes } from 'vtex.css-handles'
 
 import { fetchWithRetry } from './legacy/utils/fetchWithRetry'
@@ -12,11 +12,16 @@ interface Props {
 }
 
 const Summary: FC<Props> = ({ classes }) => {
-  const { useOrderForm } = OrderFormComponent
+  const { useOrderForm } = OrderFormComponent;
+  const { useOrderQueue, QueueStatus } = OrderQueue;
+  const orderFormContext = useOrderForm();
 
   const {
     orderForm: { totalizers, value, items, paymentData },
-  } = useOrderForm()
+  } = orderFormContext;
+  const { listen } = useOrderQueue();
+
+  const [finalTotalizers, setFinalTotalizers] = useState(totalizers);
 
   const [packagesSkuIds, setPackagesSkuIds] = useState<string[]>([])
   const [sgrSkuIds, setSgrSkuIds] = useState<string[]>([])
@@ -81,34 +86,57 @@ const Summary: FC<Props> = ({ classes }) => {
     }, 0)
   }, [items, sgrSkuIds])
 
-  let newTotalizers = totalizers
+  listen(QueueStatus.FULFILLED, () => {
+    const onlySgrOrBags = items.every(
+      (item: any) =>
+        sgrSkuIds.includes(item.id) || packagesSkuIds.includes(item.id)
+    )
 
-  newTotalizers = JSON.parse(JSON.stringify(totalizers))
-  const totalizerItems = newTotalizers.find((t: { id: string }) => t.id === 'Items')
-
-  if (flegValue && typeof flegValue === 'number') {
-    newTotalizers.push({
-      id: 'Packaging',
-      name: 'Taxa ambalare',
-      value: flegValue,
-      __typename: 'Totalizer',
-    })
-
-    if (totalizerItems) {
-      totalizerItems.value -= flegValue ?? 0
+    if (onlySgrOrBags) {
+      computeTotalizers()
     }
-  }
+  });
 
-  if (sgrValue && typeof sgrValue === 'number') {
-    newTotalizers.push({
-      id: 'SGR',
-      name: 'Garantie',
-      value: sgrValue,
-      __typename: 'Totalizer',
-    })
-    if (totalizerItems) {
-      totalizerItems.value -= sgrValue ?? 0
+  useEffect(() => {
+    computeTotalizers()
+  }, [items, flegValue, sgrValue, totalizers])
+
+  const computeTotalizers = () => {
+    if (!items?.length) {
+      setFinalTotalizers([])
+      return
     }
+
+    let newTotalizers = JSON.parse(JSON.stringify(totalizers))
+
+    const totalizerItems = newTotalizers.find((t: { id: string }) => t.id === 'Items')
+
+    if (flegValue && typeof flegValue === 'number') {
+      newTotalizers.push({
+        id: 'Packaging',
+        name: 'Taxa ambalare',
+        value: flegValue,
+        __typename: 'Totalizer',
+      })
+
+      if (totalizerItems) {
+        totalizerItems.value -= flegValue ?? 0
+      }
+    }
+
+    if (sgrValue && typeof sgrValue === 'number') {
+      newTotalizers.push({
+        id: 'SGR',
+        name: 'Garantie',
+        value: sgrValue,
+        __typename: 'Totalizer',
+      })
+      if (totalizerItems) {
+        totalizerItems.value -= sgrValue ?? 0
+      }
+    }
+
+    setFinalTotalizers(newTotalizers)
   }
 
   const { handles } = useCssHandles(CSS_HANDLES, { classes })
@@ -125,7 +153,7 @@ const Summary: FC<Props> = ({ classes }) => {
     <div className={`${handles.minicartSummary} ph4 ph6-l pt5`}>
       <ExtensionPoint
         id="checkout-summary"
-        totalizers={newTotalizers}
+        totalizers={finalTotalizers}
         paymentData={paymentData}
         total={value}
         originalTotal={originalValue}
