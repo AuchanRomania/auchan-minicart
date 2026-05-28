@@ -1,40 +1,45 @@
 import React, { FC, useEffect, useMemo, useState } from 'react'
 import { ExtensionPoint } from 'vtex.render-runtime'
-import { OrderForm as OrderFormComponent } from 'vtex.order-manager'
+import { useOrderForm } from 'vtex.order-manager/OrderForm'
 import { useCssHandles, CssHandlesTypes } from 'vtex.css-handles'
 
 import { fetchWithRetry } from './legacy/utils/fetchWithRetry'
+import useShippingBreakdownFromCartContext from './modules/useShippingBreakdownFromCartContext'
 
 const CSS_HANDLES = ['minicartSummary'] as const
+
 
 interface Props {
   classes?: CssHandlesTypes.CustomClasses<typeof CSS_HANDLES>
 }
 
 const Summary: FC<Props> = ({ classes }) => {
-  const { useOrderForm } = OrderFormComponent
-
+  const { orderForm }: OrderFormContext = useOrderForm()
   const {
-    orderForm: { totalizers, value, items, paymentData },
-  } = useOrderForm()
+    totalizers = [],
+    value = 0,
+    items = [],
+    paymentData,
+  } = orderForm ?? {}
+  const { bagsValue } = useShippingBreakdownFromCartContext()
 
-  const [packagesSkuIds, setPackagesSkuIds] = useState<string[]>([])
+
   const [sgrSkuIds, setSgrSkuIds] = useState<string[]>([])
 
   useEffect(() => {
     let isSubscribed = true
 
-    fetchWithRetry('/_v/private/api/cart-bags-manager/app-settings', 3).then(
-      (res: PackagesSkuIds) => {
+    fetchWithRetry<PackagesSkuIds>('/auchan/v1/cart-manager/app-settings', 3).then(
+      res => {
         if (res && isSubscribed) {
           try {
-            const { bagsSettings, sgrSettings } = res?.data ?? {}
-
-            setPackagesSkuIds(Object.values(bagsSettings))
+            const { sgrSettings = {} } = res?.data ?? {}
 
             const allSkuIds: string[] = []
 
-            Object.values(sgrSettings).forEach(sgrType => {
+            Object.values(
+              sgrSettings as Record<string, { skuIds?: string[] }>
+            ).forEach(sgrType => {
               if (sgrType?.skuIds) {
                 allSkuIds.push(...sgrType.skuIds)
               }
@@ -52,20 +57,6 @@ const Summary: FC<Props> = ({ classes }) => {
       isSubscribed = false
     }
   }, [])
-
-  const flegValue = useMemo(() => {
-    if (!packagesSkuIds.length) {
-      return
-    }
-    return items.reduce((total: number, item: OrderFormItem) => {
-      if (packagesSkuIds.includes(item.id)) {
-        return (
-          total + ((item?.listPrice as number) ?? 0) * (item?.quantity ?? 1)
-        )
-      }
-      return total
-    }, 0)
-  }, [items, packagesSkuIds])
 
   const sgrValue = useMemo(() => {
     if (!sgrSkuIds.length) {
@@ -85,17 +76,20 @@ const Summary: FC<Props> = ({ classes }) => {
 
   newTotalizers = JSON.parse(JSON.stringify(totalizers))
   const totalizerItems = newTotalizers.find((t: { id: string }) => t.id === 'Items')
+  const shippingTotalizer = newTotalizers.find(
+    (t: { id: string }) => t.id === 'Shipping'
+  )
 
-  if (flegValue && typeof flegValue === 'number') {
+  if (bagsValue > 0) {
     newTotalizers.push({
       id: 'Packaging',
-      name: 'Taxa ambalare',
-      value: flegValue,
+      name: 'Taxă operațională',
+      value: bagsValue,
       __typename: 'Totalizer',
     })
 
-    if (totalizerItems) {
-      totalizerItems.value -= flegValue ?? 0
+    if (shippingTotalizer) {
+      shippingTotalizer.value = Math.max(shippingTotalizer.value - bagsValue, 0)
     }
   }
 
