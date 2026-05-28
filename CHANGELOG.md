@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## Fixed
+
+- Group SLA totals from dockId instead of warehouseId in breakdown
+
 ## [0.1.0] - 2026-05-28
 
 ### Changed
