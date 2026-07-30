@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { usePixel } from 'vtex.pixel-manager'
 
 import { transformOrderFormItems } from './pixelHelper'
@@ -8,19 +8,24 @@ const useViewCartPixel = (
   orderFormItems: OrderForm['items']
 ) => {
   const { push } = usePixel()
-
-  const transformedItems = transformOrderFormItems(orderFormItems)
+  const emittedForCurrentOpen = useRef(false)
 
   useEffect(() => {
     if (!isOpen) {
+      emittedForCurrentOpen.current = false
       return
     }
 
+    if (emittedForCurrentOpen.current || !orderFormItems) {
+      return
+    }
+
+    emittedForCurrentOpen.current = true
     push({
       event: 'viewCart',
-      items: transformedItems,
+      items: transformOrderFormItems(orderFormItems),
     })
-  }, [push, isOpen, transformedItems])
+  }, [push, isOpen, orderFormItems])
 }
 
 export default useViewCartPixel

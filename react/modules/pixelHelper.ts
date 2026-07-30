@@ -1,15 +1,29 @@
 export function mapCartItemToPixel(item: CartItem): PixelCartItem {
+  const category =
+    productCategory(item) || item.category?.replace(/^\/|\/$/g, '') || ''
+
   return {
     skuId: item.id,
     variant: item.skuName,
     price: item.sellingPrice,
+    sellingPrice: item.sellingPrice,
+    originalPrice: Math.round(
+      item.listPrice ?? item.price ?? item.sellingPrice
+    ),
     priceIsInt: true,
     name: getNameWithoutVariant(item),
     quantity: item.quantity,
     productId: item.productId,
     productRefId: item.productRefId,
     brand: item.additionalInfo ? item.additionalInfo.brandName : '',
-    category: productCategory(item),
+    category,
+    categories: item.categories ?? (category ? [`/${category}/`] : []),
+    item_store: item.item_store ?? item.seller,
+    in_stock:
+      item.in_stock ??
+      (item.availability === undefined
+        ? undefined
+        : item.availability === 'available'),
     detailUrl: item.detailUrl,
     imageUrl: item.imageUrls
       ? fixUrlProtocol(item.imageUrls.at3x)
@@ -21,12 +35,18 @@ export function mapCartItemToPixel(item: CartItem): PixelCartItem {
 export function mapBuyButtonItemToPixel(item: BuyButtonItem): PixelCartItem {
   // Change this `/Apparel & Accessories/Clothing/Tops/`
   // to this `Apparel & Accessories/Clothing/Tops`
-  const category = item.category ? item.category.slice(1, -1) : ''
+  const category = item.category
+    ? item.category.replace(/^\/|\/$/g, '')
+    : ''
 
   return {
     skuId: item.id,
     variant: item.skuName,
     price: item.sellingPrice,
+    sellingPrice: item.sellingPrice,
+    originalPrice: Math.round(
+      item.listPrice ?? item.price ?? item.sellingPrice
+    ),
     priceIsInt: true,
     name: item.name,
     quantity: item.quantity,
@@ -34,6 +54,13 @@ export function mapBuyButtonItemToPixel(item: BuyButtonItem): PixelCartItem {
     productRefId: item.productRefId,
     brand: item.brand,
     category,
+    categories: item.categories ?? (category ? [`/${category}/`] : []),
+    item_store: item.item_store ?? item.seller,
+    in_stock:
+      item.in_stock ??
+      (item.availability === undefined
+        ? undefined
+        : item.availability === 'available'),
     detailUrl: item.detailUrl,
     imageUrl: item.imageUrl,
     referenceId: item.refId,
@@ -91,6 +118,8 @@ interface PixelCartItem {
   skuId: string
   variant: string
   price: number
+  sellingPrice: number
+  originalPrice?: number
   priceIsInt: boolean
   name: string
   quantity: number
@@ -98,6 +127,9 @@ interface PixelCartItem {
   productRefId: string
   brand: string
   category: string
+  categories: string[]
+  item_store?: string
+  in_stock?: boolean
   detailUrl: string
   imageUrl: string
   referenceId: string
@@ -107,12 +139,19 @@ interface BuyButtonItem {
   id: string
   skuName: string
   sellingPrice: number
+  price?: number
+  listPrice?: number
   name: string
   quantity: number
   productId: string
   productRefId: string
   brand: string
   category: string
+  categories?: string[]
+  seller?: string
+  item_store?: string
+  availability?: string
+  in_stock?: boolean
   detailUrl: string
   imageUrl: string
   refId: string
@@ -122,6 +161,8 @@ interface CartItem {
   id: string
   skuName: string
   sellingPrice: number
+  price?: number
+  listPrice?: number
   name: string
   quantity: number
   productId: string
@@ -131,6 +172,12 @@ interface CartItem {
   }
   productCategoryIds: string
   productCategories: Record<string, string>
+  category?: string
+  categories?: string[]
+  seller?: string
+  item_store?: string
+  availability?: string
+  in_stock?: boolean
   detailUrl: string
   // Field from the usual orderForm API
   imageUrl?: string
