@@ -1,8 +1,139 @@
+const LIST_ATTR_STORAGE_KEY = 'ga4:listAttr:v1'
+const LEGACY_LIST_ATTRIBUTION_PREFIX = 'auchan:ga4:listAttribution:'
+const LIST_ATTRIBUTION_TTL_MS = 30 * 60 * 1000
+const LIST_ATTRIBUTION_MAX_ENTRIES = 100
+
+type ListAttrEntry = {
+  listId: string
+  listName: string
+  position?: number
+  ts: number
+}
+
+type ListAttrMap = Record<string, ListAttrEntry>
+
+function canUseSessionStorage() {
+  return typeof sessionStorage !== 'undefined'
+}
+
+function isExpired(entry: ListAttrEntry, now = Date.now()) {
+  return !entry?.ts || now - entry.ts > LIST_ATTRIBUTION_TTL_MS
+}
+
+function purgeExpired(map: ListAttrMap, now = Date.now()): ListAttrMap {
+  const next: ListAttrMap = {}
+
+  Object.keys(map).forEach(productId => {
+    const entry = map[productId]
+
+    if (entry && !isExpired(entry, now)) {
+      next[productId] = entry
+    }
+  })
+
+  return next
+}
+
+function evictLru(map: ListAttrMap, max = LIST_ATTRIBUTION_MAX_ENTRIES): ListAttrMap {
+  const ids = Object.keys(map)
+
+  if (ids.length <= max) return map
+
+  const sorted = ids.sort((a, b) => (map[a].ts || 0) - (map[b].ts || 0))
+  const toRemove = sorted.slice(0, ids.length - max)
+  const next = { ...map }
+
+  toRemove.forEach(id => {
+    delete next[id]
+  })
+
+  return next
+}
+
+function clearLegacyKeys() {
+  if (!canUseSessionStorage()) return
+
+  try {
+    const toRemove: string[] = []
+
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i)
+
+      if (key && key.startsWith(LEGACY_LIST_ATTRIBUTION_PREFIX)) {
+        toRemove.push(key)
+      }
+    }
+
+    toRemove.forEach(key => sessionStorage.removeItem(key))
+  } catch {
+  }
+}
+
+function readMap(): ListAttrMap {
+  if (!canUseSessionStorage()) return {}
+
+  try {
+    const raw = sessionStorage.getItem(LIST_ATTR_STORAGE_KEY)
+
+    if (!raw) {
+      clearLegacyKeys()
+
+      return {}
+    }
+
+    const parsed = JSON.parse(raw) as ListAttrMap
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {}
+    }
+
+    return purgeExpired(parsed)
+  } catch {
+    return {}
+  }
+}
+
+function writeMap(map: ListAttrMap) {
+  if (!canUseSessionStorage()) return
+
+  try {
+    sessionStorage.setItem(
+      LIST_ATTR_STORAGE_KEY,
+      JSON.stringify(evictLru(purgeExpired(map)))
+    )
+    clearLegacyKeys()
+  } catch {
+  }
+}
+
+function getListAttributionFields(productId: string) {
+  if (!productId) return {}
+
+  try {
+    const map = readMap()
+    const entry = map[productId]
+
+    if (!entry || isExpired(entry)) {
+      return {}
+    }
+
+    return {
+      item_list_id: entry.listId,
+      item_list_name: entry.listName,
+      ...(entry.position != null ? { index: entry.position } : {}),
+    }
+  } catch {
+    return {}
+  }
+}
+
 export function mapCartItemToPixel(item: CartItem): PixelCartItem {
   return {
     skuId: item.id,
     variant: item.skuName,
     price: item.sellingPrice,
+    sellingPrice: item.sellingPrice,
+    listPrice: item.listPrice ?? item.price,
     priceIsInt: true,
     name: getNameWithoutVariant(item),
     quantity: item.quantity,
@@ -15,6 +146,7 @@ export function mapCartItemToPixel(item: CartItem): PixelCartItem {
       ? fixUrlProtocol(item.imageUrls.at3x)
       : item.imageUrl ?? '',
     referenceId: item.refId,
+    ...(item.seller ? { seller: item.seller } : {}),
   }
 }
 
@@ -27,6 +159,8 @@ export function mapBuyButtonItemToPixel(item: BuyButtonItem): PixelCartItem {
     skuId: item.id,
     variant: item.skuName,
     price: item.sellingPrice,
+    sellingPrice: item.sellingPrice,
+    listPrice: item.listPrice ?? item.sellingPrice,
     priceIsInt: true,
     name: item.name,
     quantity: item.quantity,
@@ -37,6 +171,7 @@ export function mapBuyButtonItemToPixel(item: BuyButtonItem): PixelCartItem {
     detailUrl: item.detailUrl,
     imageUrl: item.imageUrl,
     referenceId: item.refId,
+    ...getListAttributionFields(item.productId),
   }
 }
 
@@ -73,10 +208,14 @@ function getNameWithoutVariant(item: CartItem) {
 
 function productCategory(item: CartItem) {
   try {
-    const categoryIds = item.productCategoryIds.split('/').filter(c => c.length)
-    const category = categoryIds.map(id => item.productCategories[id]).join('/')
+    const categoryIds = item.productCategoryIds
+      .split('/')
+      .filter(c => c.length)
 
-    return category
+    return categoryIds
+      .map(id => item.productCategories[id])
+      .filter(Boolean)
+      .join('/')
   } catch {
     return ''
   }
@@ -84,6 +223,7 @@ function productCategory(item: CartItem) {
 
 export function transformOrderFormItems(orderFormItems: OrderForm['items']) {
   if (!orderFormItems || !orderFormItems.length) return []
+
   return orderFormItems.map(item => mapCartItemToPixel(item))
 }
 
@@ -91,6 +231,8 @@ interface PixelCartItem {
   skuId: string
   variant: string
   price: number
+  sellingPrice?: number
+  listPrice?: number
   priceIsInt: boolean
   name: string
   quantity: number
@@ -101,12 +243,18 @@ interface PixelCartItem {
   detailUrl: string
   imageUrl: string
   referenceId: string
+  seller?: string
+  item_store?: string
+  item_list_id?: string
+  item_list_name?: string
+  index?: number
 }
 
 interface BuyButtonItem {
   id: string
   skuName: string
   sellingPrice: number
+  listPrice?: number
   name: string
   quantity: number
   productId: string
@@ -121,6 +269,8 @@ interface BuyButtonItem {
 interface CartItem {
   id: string
   skuName: string
+  price?: number
+  listPrice?: number
   sellingPrice: number
   name: string
   quantity: number
@@ -141,4 +291,5 @@ interface CartItem {
     at3x: string
   }
   refId: string
+  seller?: string
 }
