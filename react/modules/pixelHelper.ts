@@ -130,6 +130,7 @@ export function mapCartItemToPixel(item: CartItem): PixelCartItem {
       : item.imageUrl ?? '',
     referenceId: item.refId,
     ...(item.seller ? { seller: item.seller } : {}),
+    ...getListAttributionFields(item.productId),
   }
 }
 

@@ -3,6 +3,12 @@ import { usePixel } from 'vtex.pixel-manager'
 
 import { transformOrderFormItems } from './pixelHelper'
 
+declare global {
+  interface Window {
+    __auchanViewCart?: { active: boolean; source: 'cart-page' }
+  }
+}
+
 function isOrderFormItemsReady(orderFormItems: OrderForm['items'] | undefined) {
   if (!orderFormItems) return false
 
@@ -14,6 +20,10 @@ function isOrderFormItemsReady(orderFormItems: OrderForm['items'] | undefined) {
   }
 
   return true
+}
+
+function isCartPageViewCartOwner() {
+  return Boolean(window.__auchanViewCart?.active)
 }
 
 const useViewCartPixel = (
@@ -30,6 +40,10 @@ const useViewCartPixel = (
     }
 
     if (emittedForOpenRef.current) {
+      return
+    }
+
+    if (isCartPageViewCartOwner()) {
       return
     }
 
