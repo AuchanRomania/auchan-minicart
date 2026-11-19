@@ -19,6 +19,7 @@ interface Props {
   quantityDisplay: QuantityDisplayType
   itemCountMode: MinicartTotalItemsType
   variation?: string
+  onClick?: () => void
 }
 
 const countCartItems = (
@@ -65,7 +66,7 @@ const countCartItems = (
 }
 
 const MinicartIconButton: React.FC<Props> = props => {
-  const { Icon, itemCountMode, quantityDisplay, variation } = props
+  const { Icon, itemCountMode, quantityDisplay, variation, onClick } = props
   const { orderForm, loading }: OrderFormContext = useOrderForm()
   const { handles } = useMinicartCssHandles()
   const { open, openBehavior, openOnHoverProp } = useMinicartState()
@@ -115,6 +116,8 @@ const MinicartIconButton: React.FC<Props> = props => {
   const goToCheckout = useCheckout()
 
   const handleClick = () => {
+    onClick?.()
+
     if (openOnHoverProp) {
       if (variation === 'popupWithLink') {
         goToCheckout(checkoutUrl)

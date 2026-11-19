@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- Move the cart button outside the `aria-hidden` trigger wrapper
+
 ## [0.1.2] - 2026-09-14
 
 ## [0.1.1] - 2026-05-28
